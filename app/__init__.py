@@ -2,7 +2,6 @@ from flask import Flask
 from flask_cors import CORS
 
 from .routes import customerBp
-from .webhook import webhookBp
 
 
 def create_app():
@@ -10,6 +9,5 @@ def create_app():
     CORS(app)
 
     app.register_blueprint(customerBp)
-    app.register_blueprint(webhookBp)
 
     return app
