@@ -2,7 +2,9 @@ import os
 from flask import Blueprint, request, jsonify
 import json, uuid
 
-CustomersRecord = "app/customers.json"
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+CustomersRecord = os.path.join(BASE_DIR, "customers.json")
+
 customerBp = Blueprint("customer", __name__)
 
 if not os.path.exists(CustomersRecord) or os.path.getsize(CustomersRecord) == 0:
@@ -14,26 +16,32 @@ else:
 
 # INFO: Welcome Message
 @customerBp.route("/")
-def hello_world():
+def helloWorld():
     return jsonify({"Message": "Hello, World!"})
 
 
 # INFO: List all Customers
 @customerBp.route("/customers", methods=["GET"])
-def get_customers():
+def getCustomers():
+    with open(CustomersRecord, "r") as f:
+        customers = json.load(f)
+        print("📁 Using file:", os.path.abspath(CustomersRecord))
     return jsonify({"Customers": customers})
 
 
 # INFO: Get a specific Customer by ID
 @customerBp.route("/customers/<id>", methods=["GET"])
-def get_customer(id):
+def getCustomer(id):
+    with open(CustomersRecord, "r") as f:
+        customers = json.load(f)
     customer = next((c for c in customers if c["Id"] == id), None)
+    print("📁 Using file:", os.path.abspath(CustomersRecord))
     return jsonify(customer or {"Error": "Customer not found ..."})
 
 
 # INFO: Search for customers by Name
 @customerBp.route("/customers/search", methods=["GET"])
-def search_customer():
+def searchCustomer():
     firstName = request.args.get("FirstName", "").strip().lower()
     lastName = request.args.get("LastName", "").strip().lower()
     matchMode = request.args.get("mode", "contains").lower()
@@ -81,7 +89,7 @@ def search_customer():
 
 # INFO: Get Customer by Gender
 @customerBp.route("/customers/filter-by-gender", methods=["GET"])
-def filter_by_gender():
+def filterByGender():
     gender_query = request.args.get("Gender", "").strip().lower()
 
     if gender_query not in ["male", "female"]:
@@ -105,8 +113,8 @@ def filter_by_gender():
 
 
 # INFO: Update a Customer
-@customerBp.route("/customers/<string:customer_id>", methods=["PUT"])
-def update_customer(customer_id):
+@customerBp.route("/customers/<string:customerId>", methods=["PUT"])
+def updateCustomer(customerId):
     data = request.json
 
     if not os.path.exists(CustomersRecord):
@@ -120,7 +128,7 @@ def update_customer(customer_id):
     updated = False
 
     for idx, customer in enumerate(customers):
-        if customer.get("Id") == customer_id:
+        if customer.get("Id") == customerId:
             customers[idx].update(data)
             updated = True
             break
@@ -131,12 +139,12 @@ def update_customer(customer_id):
     with open(CustomersRecord, "w") as f:
         json.dump(customers, f, indent=2)
 
-    return jsonify({"Status": "Updated", "Id": customer_id}), 200
+    return jsonify({"Status": "Updated", "Id": customerId}), 200
 
 
 # INFO: Add a new Customer
 @customerBp.route("/customers", methods=["POST"])
-def add_customer():
+def addCustomer():
     required_fields = ["Name", "Age", "Gender", "Role"]
     data = request.json
 
@@ -149,7 +157,10 @@ def add_customer():
 
     if os.path.exists(CustomersRecord) and os.path.getsize(CustomersRecord) > 0:
         with open(CustomersRecord, "r") as f:
-            customers = json.load(f)
+            try:
+                customers = json.load(f)
+            except json.JSONDecodeError:
+                customers = []
     else:
         customers = []
 
@@ -166,15 +177,14 @@ def add_customer():
     with open(CustomersRecord, "w") as f:
         json.dump(customers, f, indent=2)
 
-    return (
-        jsonify({"Status": "Added", "Customer": newCustomer}),
-        201,
-    )
+    print("📁 Using file:", os.path.abspath(CustomersRecord))
+
+    return jsonify({"Status": "Added", "Customer": newCustomer}), 201
 
 
 # INFO: Bulk Add Customers
 @customerBp.route("/customers/bulk", methods=["POST"])
-def add_bulk_customers():
+def addBulkCustomers():
     data = request.json
 
     if not isinstance(data, list):
@@ -200,8 +210,11 @@ def add_bulk_customers():
         newCustomers.append(customer)
 
     if os.path.exists(CustomersRecord) and os.path.getsize(CustomersRecord) > 0:
-        with open(CustomersRecord, "r") as f:
-            customers = json.load(f)
+        try:
+            with open(CustomersRecord, "r") as f:
+                customers = json.load(f)
+        except json.JSONDecodeError:
+            customers = []
     else:
         customers = []
 
@@ -210,10 +223,12 @@ def add_bulk_customers():
     with open(CustomersRecord, "w") as f:
         json.dump(customers, f, indent=2)
 
+    print("📁 Using file:", os.path.abspath(CustomersRecord))
+
     return (
         jsonify(
             {
-                "Status": " Customer bulk added",
+                "Status": "Customer bulk added",
                 "Count": len(newCustomers),
                 "Customers": newCustomers,
             }
@@ -223,15 +238,15 @@ def add_bulk_customers():
 
 
 # INFO: Delete a Customer
-@customerBp.route("/customers/<string:customer_id>", methods=["DELETE"])
-def delete_customer(customer_id):
+@customerBp.route("/customers/<string:customerId>", methods=["DELETE"])
+def deleteCustomer(customerId):
     if os.path.exists(CustomersRecord) and os.path.getsize(CustomersRecord) > 0:
         with open(CustomersRecord, "r") as f:
             customers = json.load(f)
     else:
         return jsonify({"Error": "No customer data found ..."}), 404
 
-    updated_customers = [c for c in customers if c["Id"] != customer_id]
+    updated_customers = [c for c in customers if c["Id"] != customerId]
 
     if len(updated_customers) == len(customers):
         return jsonify({"Error": "Customer not found ..."}), 404
@@ -239,12 +254,12 @@ def delete_customer(customer_id):
     with open(CustomersRecord, "w") as f:
         json.dump(updated_customers, f, indent=2)
 
-    return jsonify({"Status": "Deleted", "Id": customer_id}), 200
+    return jsonify({"Status": "Deleted", "Id": customerId}), 200
 
 
 # INFO: Botpress Webhook
 @customerBp.route("/webhook", methods=["POST"])
-def bot_webhook():
+def botWebhook():
     data = request.json
     print("Incoming from Botpress:", data)
 
