@@ -275,12 +275,39 @@ def deleteCustomer(customerId):
     return jsonify({"Status": "Deleted", "Id": customerId}), 200
 
 
-@customerBp.route("/webhook", methods=["POST"])
-@require_token
-def botWebhook():
-    data = request.json
-    reply = {
-        "type": "text",
-        "text": "Hey! Got your message: " + data.get("text", "No text found."),
-    }
-    return jsonify(reply), 200
+# INFO: --- Updated Webhook Handler ---
+
+
+@customerBp.route("/webhook", methods=["GET", "POST"])
+def webhook():
+    MyToken = os.getenv("MyToken")
+
+    if request.method == "GET":
+        mode = request.args.get("hub.mode")
+        token = request.args.get("hub.MyToken")
+        challenge = request.args.get("hub.challenge")
+
+        if mode == "subscribe" and token == MyToken:
+            return challenge, 200
+        else:
+            return "Verification failed", 403
+
+    elif request.method == "POST":
+        auth = request.headers.get("Authorization")
+        if not auth or auth not in [Token, MyToken]:
+            return jsonify({"Error": "Unauthorized access."}), 401
+
+        data = request.json
+        message_body = None
+        try:
+            message_body = data["entry"][0]["changes"][0]["value"]["messages"][0][
+                "text"
+            ]["body"]
+        except (KeyError, IndexError, TypeError):
+            message_body = "No text found."
+
+        reply = {
+            "type": "text",
+            "text": f"Hey! Got your message: {message_body}",
+        }
+        return jsonify(reply), 200
