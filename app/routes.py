@@ -1,9 +1,13 @@
 import os
 from flask import Blueprint, request, jsonify
 import json, uuid
+from functools import wraps
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 CustomersRecord = os.path.join(BASE_DIR, "customers.json")
+
+Token = os.getenv("Token")
+MyToken = os.getenv("MyToken")
 
 customerBp = Blueprint("customer", __name__)
 
@@ -14,33 +18,48 @@ else:
         customers = json.load(f)
 
 
-# INFO: Welcome Message
+# INFO: --- Auth Decorator ---
+
+
+def require_token(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        auth = request.headers.get("Authorization")
+        if auth not in [Token, MyToken]:
+            return jsonify({"Error": "Unauthorized access."}), 401
+        return f(*args, **kwargs)
+
+    return decorated
+
+
+# INFO: --- Routes start here ---
+
+
 @customerBp.route("/")
+@require_token
 def helloWorld():
     return jsonify({"Message": "Hello, World!"})
 
 
-# INFO: List all Customers
 @customerBp.route("/customers", methods=["GET"])
+@require_token
 def getCustomers():
     with open(CustomersRecord, "r") as f:
         customers = json.load(f)
-        print("📁 Using file:", os.path.abspath(CustomersRecord))
     return jsonify({"Customers": customers})
 
 
-# INFO: Get a specific Customer by ID
 @customerBp.route("/customers/<id>", methods=["GET"])
+@require_token
 def getCustomer(id):
     with open(CustomersRecord, "r") as f:
         customers = json.load(f)
     customer = next((c for c in customers if c["Id"] == id), None)
-    print("📁 Using file:", os.path.abspath(CustomersRecord))
-    return jsonify(customer or {"Error": "Customer not found ..."})
+    return jsonify(customer or {"Error": "Customer not found."})
 
 
-# INFO: Search for customers by Name
 @customerBp.route("/customers/search", methods=["GET"])
+@require_token
 def searchCustomer():
     firstName = request.args.get("FirstName", "").strip().lower()
     lastName = request.args.get("LastName", "").strip().lower()
@@ -61,39 +80,45 @@ def searchCustomer():
         fn_match = ln_match = True
 
         if firstName:
-            fn = name_parts[0] if len(name_parts) > 0 else ""
-            if matchMode == "exact":
-                fn_match = fn == firstName
-            elif matchMode == "startswith":
-                fn_match = fn.startswith(firstName)
-            else:
-                fn_match = firstName in fn
+            fn = name_parts[0] if name_parts else ""
+            fn_match = (
+                fn == firstName
+                if matchMode == "exact"
+                else (
+                    fn.startswith(firstName)
+                    if matchMode == "startswith"
+                    else firstName in fn
+                )
+            )
 
         if lastName:
             ln = name_parts[1] if len(name_parts) > 1 else ""
-            if matchMode == "exact":
-                ln_match = ln == lastName
-            elif matchMode == "startswith":
-                ln_match = ln.startswith(lastName)
-            else:
-                ln_match = lastName in ln
+            ln_match = (
+                ln == lastName
+                if matchMode == "exact"
+                else (
+                    ln.startswith(lastName)
+                    if matchMode == "startswith"
+                    else lastName in ln
+                )
+            )
 
         if fn_match and ln_match:
             matched.append(c)
 
     if not matched:
-        return jsonify({"Message": "No such customer exists..."}), 404
+        return jsonify({"Message": "No such customer exists."}), 404
 
     return jsonify({"Matches": matched}), 200
 
 
-# INFO: Get Customer by Gender
 @customerBp.route("/customers/filter-by-gender", methods=["GET"])
+@require_token
 def filterByGender():
     gender_query = request.args.get("Gender", "").strip().lower()
 
     if gender_query not in ["male", "female"]:
-        return jsonify({"error": "\"Gender\" must be either 'male' or 'female'"}), 400
+        return jsonify({"Error": "\"Gender\" must be either 'male' or 'female'"}), 400
 
     with open(CustomersRecord, "r") as f:
         customers = json.load(f)
@@ -112,13 +137,13 @@ def filterByGender():
     )
 
 
-# INFO: Update a Customer
 @customerBp.route("/customers/<string:customerId>", methods=["PUT"])
+@require_token
 def updateCustomer(customerId):
     data = request.json
 
     if not os.path.exists(CustomersRecord):
-        return jsonify({"Error": "Customer data not found ..."}), 404
+        return jsonify({"Error": "Customer data not found."}), 404
     with open(CustomersRecord, "r") as f:
         try:
             customers = json.load(f)
@@ -126,7 +151,6 @@ def updateCustomer(customerId):
             return jsonify({"Error": "Corrupted data file."}), 500
 
     updated = False
-
     for idx, customer in enumerate(customers):
         if customer.get("Id") == customerId:
             customers[idx].update(data)
@@ -134,7 +158,7 @@ def updateCustomer(customerId):
             break
 
     if not updated:
-        return jsonify({"Error": "Customer not found ..."}), 404
+        return jsonify({"Error": "Customer not found."}), 404
 
     with open(CustomersRecord, "w") as f:
         json.dump(customers, f, indent=2)
@@ -142,18 +166,18 @@ def updateCustomer(customerId):
     return jsonify({"Status": "Updated", "Id": customerId}), 200
 
 
-# INFO: Add a new Customer
 @customerBp.route("/customers", methods=["POST"])
+@require_token
 def addCustomer():
     required_fields = ["Name", "Age", "Gender", "Role"]
     data = request.json
 
     if not data:
-        return jsonify({"Error": "No data sent ..."}), 400
+        return jsonify({"Error": "No data sent."}), 400
 
     missing = [field for field in required_fields if field not in data]
     if missing:
-        return jsonify({"Error": f"Missing fields: {', '.join(missing)} ..."}), 400
+        return jsonify({"Error": f"Missing fields: {', '.join(missing)}."}), 400
 
     if os.path.exists(CustomersRecord) and os.path.getsize(CustomersRecord) > 0:
         with open(CustomersRecord, "r") as f:
@@ -177,26 +201,22 @@ def addCustomer():
     with open(CustomersRecord, "w") as f:
         json.dump(customers, f, indent=2)
 
-    print("📁 Using file:", os.path.abspath(CustomersRecord))
-
     return jsonify({"Status": "Added", "Customer": newCustomer}), 201
 
 
-# INFO: Bulk Add Customers
 @customerBp.route("/customers/bulk", methods=["POST"])
+@require_token
 def addBulkCustomers():
     data = request.json
 
     if not isinstance(data, list):
-        return jsonify({"Error": "Expected a list of customers ..."}), 400
+        return jsonify({"Error": "Expected a list of customers."}), 400
 
     newCustomers = []
     for entry in data:
         if not all(k in entry for k in ["Name", "Age", "Gender", "Role"]):
             return (
-                jsonify(
-                    {"Error": "Each customer must have a Name, Age, Gender, and Role"}
-                ),
+                jsonify({"Error": "Each customer must have Name, Age, Gender, Role."}),
                 400,
             )
 
@@ -223,8 +243,6 @@ def addBulkCustomers():
     with open(CustomersRecord, "w") as f:
         json.dump(customers, f, indent=2)
 
-    print("📁 Using file:", os.path.abspath(CustomersRecord))
-
     return (
         jsonify(
             {
@@ -237,19 +255,19 @@ def addBulkCustomers():
     )
 
 
-# INFO: Delete a Customer
 @customerBp.route("/customers/<string:customerId>", methods=["DELETE"])
+@require_token
 def deleteCustomer(customerId):
     if os.path.exists(CustomersRecord) and os.path.getsize(CustomersRecord) > 0:
         with open(CustomersRecord, "r") as f:
             customers = json.load(f)
     else:
-        return jsonify({"Error": "No customer data found ..."}), 404
+        return jsonify({"Error": "No customer data found."}), 404
 
     updated_customers = [c for c in customers if c["Id"] != customerId]
 
     if len(updated_customers) == len(customers):
-        return jsonify({"Error": "Customer not found ..."}), 404
+        return jsonify({"Error": "Customer not found."}), 404
 
     with open(CustomersRecord, "w") as f:
         json.dump(updated_customers, f, indent=2)
@@ -257,15 +275,12 @@ def deleteCustomer(customerId):
     return jsonify({"Status": "Deleted", "Id": customerId}), 200
 
 
-# INFO: Botpress Webhook
 @customerBp.route("/webhook", methods=["POST"])
+@require_token
 def botWebhook():
     data = request.json
-    print("Incoming from Botpress:", data)
-
     reply = {
         "type": "text",
         "text": "Hey! Got your message: " + data.get("text", "No text found."),
     }
-
     return jsonify(reply), 200
