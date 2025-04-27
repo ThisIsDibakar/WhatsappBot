@@ -6,8 +6,8 @@ from functools import wraps
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 CustomersRecord = os.path.join(BASE_DIR, "customers.json")
 
-Token = os.getenv("Token")
-MyToken = os.getenv("MyToken")
+TOKEN = os.getenv("TOKEN")
+VERIFY_TOKEN = os.getenv("VERIFY_TOKEN")
 
 customerBp = Blueprint("customer", __name__)
 
@@ -25,7 +25,7 @@ def require_token(f):
     @wraps(f)
     def decorated(*args, **kwargs):
         auth = request.headers.get("Authorization")
-        if auth not in [Token, MyToken]:
+        if auth not in [TOKEN, VERIFY_TOKEN]:
             return jsonify({"Error": "Unauthorized access."}), 401
         return f(*args, **kwargs)
 
@@ -280,34 +280,27 @@ def deleteCustomer(customerId):
 
 @customerBp.route("/webhook", methods=["GET", "POST"])
 def webhook():
-    MyToken = os.getenv("MyToken")
-
     if request.method == "GET":
         mode = request.args.get("hub.mode")
-        token = request.args.get("hub.MyToken")
+        token = request.args.get("hub.verify_token")
         challenge = request.args.get("hub.challenge")
 
-        if mode == "subscribe" and token == MyToken:
+        if mode == "subscribe" and token == VERIFY_TOKEN:
             return challenge, 200
         else:
             return "Verification failed", 403
 
     elif request.method == "POST":
-        auth = request.headers.get("Authorization")
-        if not auth or auth not in [Token, MyToken]:
-            return jsonify({"Error": "Unauthorized access."}), 401
-
         data = request.json
-        message_body = None
+
+        print("Received POST webhook:", data)
+
         try:
             message_body = data["entry"][0]["changes"][0]["value"]["messages"][0][
                 "text"
             ]["body"]
+            print("Message received:", message_body)
         except (KeyError, IndexError, TypeError):
-            message_body = "No text found."
+            print("No message body found.")
 
-        reply = {
-            "type": "text",
-            "text": f"Hey! Got your message: {message_body}",
-        }
-        return jsonify(reply), 200
+        return "EVENT_RECEIVED", 200
