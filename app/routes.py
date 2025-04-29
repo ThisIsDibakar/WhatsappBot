@@ -21,7 +21,7 @@ else:
 # INFO: --- Auth Decorator ---
 
 
-def require_token(f):
+def requireToken(f):
     @wraps(f)
     def decorated(*args, **kwargs):
         auth = request.headers.get("Authorization")
@@ -36,13 +36,11 @@ def require_token(f):
 
 
 @customerBp.route("/")
-@require_token
 def helloWorld():
     return jsonify({"Message": "Hello, World!"})
 
 
 @customerBp.route("/customers", methods=["GET"])
-@require_token
 def getCustomers():
     with open(CustomersRecord, "r") as f:
         customers = json.load(f)
@@ -50,7 +48,6 @@ def getCustomers():
 
 
 @customerBp.route("/customers/<id>", methods=["GET"])
-@require_token
 def getCustomer(id):
     with open(CustomersRecord, "r") as f:
         customers = json.load(f)
@@ -59,7 +56,6 @@ def getCustomer(id):
 
 
 @customerBp.route("/customers/search", methods=["GET"])
-@require_token
 def searchCustomer():
     firstName = request.args.get("FirstName", "").strip().lower()
     lastName = request.args.get("LastName", "").strip().lower()
@@ -113,7 +109,6 @@ def searchCustomer():
 
 
 @customerBp.route("/customers/filter-by-gender", methods=["GET"])
-@require_token
 def filterByGender():
     gender_query = request.args.get("Gender", "").strip().lower()
 
@@ -138,7 +133,6 @@ def filterByGender():
 
 
 @customerBp.route("/customers/<string:customerId>", methods=["PUT"])
-@require_token
 def updateCustomer(customerId):
     data = request.json
 
@@ -167,7 +161,6 @@ def updateCustomer(customerId):
 
 
 @customerBp.route("/customers", methods=["POST"])
-@require_token
 def addCustomer():
     required_fields = ["Name", "Age", "Gender", "Role"]
     data = request.json
@@ -205,7 +198,6 @@ def addCustomer():
 
 
 @customerBp.route("/customers/bulk", methods=["POST"])
-@require_token
 def addBulkCustomers():
     data = request.json
 
@@ -256,7 +248,6 @@ def addBulkCustomers():
 
 
 @customerBp.route("/customers/<string:customerId>", methods=["DELETE"])
-@require_token
 def deleteCustomer(customerId):
     if os.path.exists(CustomersRecord) and os.path.getsize(CustomersRecord) > 0:
         with open(CustomersRecord, "r") as f:
